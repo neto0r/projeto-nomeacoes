@@ -1,0 +1,20 @@
+# Credenciais
+.env
+.env.*
+!.env.example
+
+# Cache do Python
+__pycache__/
+*.pyc
+
+# Ambiente virtual
+.venv/
+venv/
+
+# Dados operacionais e currículos
+*.xlsx
+*.xlsm
+curriculos/
+
+# Arquivos de log
+*.log
