@@ -87,16 +87,38 @@ def ler_log(caminho_arquivo):
     Retorna:
     pd.DataFrame: Um DataFrame contendo os dados do remetente.
     """
-    return pd.read_excel(
+    log = pd.read_excel(
             caminho_arquivo,
             sheet_name=ABA_LOG,
             engine='openpyxl',
-
     )
+
+    # Remove somente linhas sem nenhum valor nas colunas do log.
+    log = log.dropna(
+        how="all",
+        subset=COLUNAS_LOG,
+    ).reset_index(drop=True)
+
+    # Linhas parcialmente preenchidas precisam ser corrigidas.
+    ids_ausentes = (
+        log["id_rem"].isna()
+        | log["id_cliente"].isna()
+    )
+
+    if ids_ausentes.any():
+        raise ValueError(
+            "Existem registros no Log sem id_rem ou id_cliente."
+        )
+
+    return log
+
 
 
 
 def registrar_envio(caminho_arquivo, id_rem, email_rem, id_cliente, email_cliente, resultado,):
+
+    if resultado not in ("aceito_smtp", "falha", "indeterminado"):
+        raise ValueError("Resultado de envio inválido")
 
     registro = {
         "id_envio": str(uuid4()),
@@ -183,29 +205,35 @@ def registrar_envio(caminho_arquivo, id_rem, email_rem, id_cliente, email_client
             celula_data.value = registro["data_hora"]
             celula_data.number_format = "dd/mm/yyyy hh:mm:ss"
 
-            aba_log.append([
-                registro[coluna]
-                for coluna in COLUNAS_LOG
-            ])
+        numero_linha_log = proxima_linha_log(aba_log)
 
+        for numero_coluna, nome_coluna in enumerate(COLUNAS_LOG, start=1):
             aba_log.cell(
-                row=aba_log.max_row,
-                column=2,
-            ).number_format = "dd/mm/yyyy hh:mm:ss"
+                row=numero_linha_log,
+                column=numero_coluna,
+                value=registro[nome_coluna],
+            )
 
-            # Primeiro grava uma cópia completa na mesma pasta.
-            with NamedTemporaryFile(
-                dir=caminho_arquivo.parent,
-                suffix=".xlsx",
-                delete=False,
-            ) as temporario:
-                caminho_temporario = Path(temporario.name)
 
-            arquivo.save(caminho_temporario)
-            arquivo.close()
+        aba_log.cell(
+            row=numero_linha_log,
+            column=2,
+        ).number_format = "dd/mm/yyyy hh:mm:ss"
+        
 
-            # Só substitui o original depois que a cópia ofi gravada
-            os.replace(caminho_temporario,caminho_arquivo)
+        # Primeiro grava uma cópia completa na mesma pasta.
+        with NamedTemporaryFile(
+            dir=caminho_arquivo.parent,
+            suffix=".xlsx",
+            delete=False,
+        ) as temporario:
+            caminho_temporario = Path(temporario.name)
+
+        arquivo.save(caminho_temporario)
+        arquivo.close()
+
+        # Só substitui o original depois que a cópia ofi gravada
+        os.replace(caminho_temporario,caminho_arquivo)
 
     finally:
         arquivo.close()
@@ -217,3 +245,18 @@ def registrar_envio(caminho_arquivo, id_rem, email_rem, id_cliente, email_client
             caminho_temporario.unlink()
 
     return registro
+
+
+def proxima_linha_log(aba):
+    # Procura de baixo para cima uma linha com algum conteúdo.
+    for numero in range(aba.max_row, 1, -1):
+        possui_conteudo = any(
+            aba.cell(row=numero, column=coluna).value not in (None, "")
+            for coluna in range(1, len(COLUNAS_LOG) + 1)
+        )
+
+        if possui_conteudo:
+            return numero + 1
+
+    # Se houver somente cabeçalhos, começa na linha 2.
+    return 2

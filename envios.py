@@ -37,10 +37,18 @@ def executar_lote(
                 senha=senha,
             )
 
-        except smtplib.SMTPAuthenticationError:
+        except smtplib.SMTPAuthenticationError as erro: 
             resultado = "falha"
             interromper = True
-            print("Autenticação recusada. Confira a senha de app.")
+
+            resposta = erro.smtp_error
+
+            if isinstance(resposta,bytes):
+                resposta = resposta.decode("utf-8",errors="replace")
+
+            print("Autenticação recusada pelo servidor.")
+            print(f"Código SMTP: {erro.smtp_code}")
+            print(f"Resposta: {resposta}")
 
         except smtplib.SMTPRecipientsRefused:
             resultado = "falha"
